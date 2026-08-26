@@ -1,144 +1,54 @@
+#!/bin/bash
 
-#!/usr/bin/env bash
-set -u
+set -e
 
 echo "=========================================="
-echo " WehttamSnaps-Niri — Ubuntu Installer"
+echo " WehttamSnaps-Niri Ubuntu Installer"
 echo "=========================================="
 
-if [ "$(id -u)" -ne 0 ]; then
-    echo "[ERROR] Run with sudo:"
-    echo "sudo ./install.sh"
+if [ "$(id -u)" != "0" ]; then
+    echo "Run with: sudo ./install.sh"
     exit 1
 fi
 
 if [ ! -f /etc/os-release ]; then
-    echo "[ERROR] Cannot detect operating system."
+    echo "ERROR: Cannot detect Linux distribution."
     exit 1
 fi
 
 . /etc/os-release
 
-if [ "${ID:-}" != "ubuntu" ]; then
-    echo "[ERROR] This installer is for Ubuntu."
-    echo "Detected: ${PRETTY_NAME:-unknown}"
+if [ "$ID" != "ubuntu" ]; then
+    echo "ERROR: This script requires Ubuntu."
+    echo "Detected: $PRETTY_NAME"
     exit 1
 fi
 
-echo "[OK] Detected: $PRETTY_NAME"
+echo "[OK] $PRETTY_NAME"
 
 echo
-echo "[1/4] Updating package lists..."
-apt-get update || {
-    echo "[ERROR] apt update failed."
-    exit 1
-}
-
-# Ubuntu package equivalents for the project's basic runtime.
-PACKAGES=(
-    git
-    curl
-    wget
-    rsync
-    jq
-    ripgrep
-    bc
-    coreutils
-    xdg-user-dirs
-    wl-clipboard
-    libnotify-bin
-    xdg-desktop-portal
-    xdg-desktop-portal-gtk
-    policykit-1
-    network-manager
-    gnome-keyring
-    foot
-    fuzzel
-    swayidle
-    swaylock
-    grim
-    slurp
-    swappy
-    ffmpeg
-    imagemagick
-    playerctl
-    pavucontrol
-    pipewire
-    pipewire-pulse
-    wireplumber
-    brightnessctl
-    ddcutil
-    upower
-    fontconfig
-    fonts-dejavu
-    fonts-liberation
-    qt6-wayland
-    qt6-base-dev
-    qt6-declarative-dev
-    qt6-svg-dev
-    qt6-multimedia-dev
-    qt6-positioning-dev
-    qt6-tools-dev
-    qt6-tools-dev-tools
-    qml6-module-qt5compat-graphicaleffects
-    qt6-image-formats-plugins
-    qt6-virtualkeyboard
-    libkf6kirigami-dev
-    kdialog
-    syntax-highlighting
-    qt6ct
-    kde-config-gtk-style
-    breeze
-    xwayland
-    tesseract-ocr
-    tesseract-ocr-eng
-)
+echo "[1/3] Updating package lists..."
+apt-get update
 
 echo
-echo "[2/4] Checking Ubuntu packages..."
+echo "[2/3] Installing Ubuntu dependencies..."
 
-AVAILABLE=()
-MISSING=()
+PACKAGES="git curl wget rsync jq ripgrep bc xdg-user-dirs wl-clipboard libnotify-bin xdg-desktop-portal xdg-desktop-portal-gtk policykit-1 network-manager gnome-keyring foot fuzzel swayidle swaylock grim slurp swappy ffmpeg imagemagick playerctl pavucontrol pipewire pipewire-pulse wireplumber brightnessctl ddcutil upower fontconfig fonts-dejavu fonts-liberation qt6-wayland qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-multimedia-dev qt6-positioning-dev qt6-tools-dev qt6-tools-dev-tools qml6-module-qt5compat-graphicaleffects qt6-image-formats-plugins qt6-virtualkeyboard kdialog qt6ct breeze xwayland tesseract-ocr tesseract-ocr-eng"
 
-for package in "${PACKAGES[@]}"; do
-    if apt-cache show "$package" >/dev/null 2>&1; then
-        AVAILABLE+=("$package")
+for PACKAGE in $PACKAGES; do
+    if apt-cache show "$PACKAGE" >/dev/null 2>&1; then
+        apt-get install -y "$PACKAGE"
     else
-        MISSING+=("$package")
+        echo "[SKIP] $PACKAGE is not available in Ubuntu."
     fi
 done
 
 echo
-echo "[3/4] Installing available packages..."
-
-if [ "${#AVAILABLE[@]}" -gt 0 ]; then
-    apt-get install -y "${AVAILABLE[@]}" || {
-        echo
-        echo "[ERROR] APT installation failed."
-        exit 1
-    }
-fi
-
+echo "[3/3] Finished."
 echo
-echo "[4/4] Result"
-echo "=========================================="
-
-if [ "${#MISSING[@]}" -gt 0 ]; then
-    echo
-    echo "[WARN] These packages are not available under these names:"
-    printf '  - %s\n' "${MISSING[@]}"
-    echo
-    echo "They need Ubuntu-specific alternatives or another installation method."
-else
-    echo "[OK] All requested Ubuntu packages were found."
-fi
-
+echo "Ubuntu dependencies installed."
 echo
-echo "Base dependency installation completed."
-echo
-echo "IMPORTANT:"
-echo "Quickshell and Matugen are handled separately because"
-echo "the Arch/AUR packages used by WehttamSnaps-Niri do not"
-echo "map directly to normal Ubuntu packages."
+echo "Quickshell and Matugen are NOT installed yet."
+echo "They require separate Ubuntu-compatible installation."
 echo
 echo "=========================================="
