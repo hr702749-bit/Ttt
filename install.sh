@@ -1,245 +1,76 @@
 #!/usr/bin/env bash
 set -u
-
-# WehttamSnaps-Niri Ubuntu 26.04 bootstrap
-# Intended for a fresh Ubuntu 26.04 LTS Server/minimal VM.
-# Re-runnable: existing packages/configs are preserved.
-
-REPO="https://github.com/Crowdrocker/WehttamSnaps-Niri.git"
-WORK="$HOME/WehttamSnaps-Niri"
-LOG="$HOME/wehttamsnaps-install.log"
-XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-
+LOG="$HOME/inir-ubuntu-install.log"
 exec > >(tee -a "$LOG") 2>&1
-
-ok()   { printf '\033[32m[OK]\033[0m %s\n' "$*"; }
-warn() { printf '\033[33m[WARN]\033[0m %s\n' "$*"; }
-die()  { printf '\033[31m[ERROR]\033[0m %s\n' "$*"; exit 1; }
-
-[ "$(id -u)" -ne 0 ] || die "Run this as your normal Ubuntu user, not root."
-command -v sudo >/dev/null || die "sudo is missing. Install it first with: su -c 'apt install sudo'"
-
-echo "============================================================"
-echo " WehttamSnaps-Niri / Ubuntu 26.04 setup"
-echo " Log: $LOG"
-echo "============================================================"
-
-# Confirm Ubuntu.
+[ "$(id -u)" -ne 0 ] || { echo "Run as your normal user, not root."; exit 1; }
 . /etc/os-release
-[ "${ID:-}" = "ubuntu" ] || die "This script is for Ubuntu."
-case "${VERSION_ID:-}" in
-  26.04) ok "Ubuntu 26.04 detected." ;;
-  *) warn "Detected Ubuntu ${VERSION_ID:-unknown}; this script is tuned for Ubuntu 26.04." ;;
-esac
+[ "${VERSION_ID:-}" = "26.04" ] || { echo "This script is for Ubuntu 26.04 LTS."; exit 1; }
 
-echo
-echo "[1/9] Enabling required Ubuntu repositories..."
+echo "=== Ubuntu 26.04 + Niri + iNiR ==="
 sudo apt-get update
-sudo apt-get install -y software-properties-common ca-certificates curl git rsync
-sudo add-apt-repository -y universe || true
+sudo apt-get install -y git curl wget ca-certificates software-properties-common build-essential pkg-config cmake ninja-build meson rustc cargo python3 python3-pip python3-venv bc coreutils rsync jq ripgrep xdg-user-dirs xdg-utils wl-clipboard cliphist libnotify-bin xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-gnome network-manager network-manager-gnome gnome-keyring polkitd gdm3 dbus-user-session pipewire pipewire-pulse wireplumber nautilus foot fish fuzzel dunst pavucontrol playerctl brightnessctl swayidle grim slurp fonts-dejavu fonts-liberation fontconfig qt6-base-dev qt6-declarative-dev qt6-wayland qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-effects qml6-module-qtquick-dialogs qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtqml qml6-module-qtqml-models qml6-module-qt5compat-graphicaleffects || true
+
+sudo add-apt-repository -y ppa:avengemedia/danklinux || true
 sudo apt-get update
+sudo apt-get install -y niri quickshell xwayland-satellite || true
+sudo apt-get install -y udiskie blueman mate-polkit libglib2.0-bin kdialog syntax-highlighting || true
 
-echo
-echo "[2/9] Adding the DankLinux PPA..."
-if ! grep -Rqs 'ppa.launchpadcontent.net/avengemedia/danklinux' /etc/apt/sources.list.d /etc/apt/sources.list 2>/dev/null; then
-    sudo add-apt-repository -y ppa:avengemedia/danklinux || true
-fi
-sudo apt-get update
-
-echo
-echo "[3/9] Installing Niri, Quickshell and core desktop dependencies..."
-
-# Package names are checked before installation. Ubuntu package names differ
-# from the Arch names used by the upstream theme documentation.
-PACKAGES=(
-  niri quickshell-git matugen cliphist wl-clipboard
-  xwayland-satellite
-  xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-gnome
-  gnome-keyring
-  polkitd policykit-1
-  network-manager
-  dbus-user-session
-  pipewire pipewire-pulse wireplumber
-  libpipewire-0.3-0
-  grim slurp swappy wf-recorder
-  imagemagick ffmpeg
-  tesseract-ocr tesseract-ocr-eng
-  playerctl pavucontrol
-  upower wtype ydotool brightnessctl ddcutil
-  swayidle
-  fuzzel
-  foot
-  libnotify-bin
-  fontconfig fonts-dejavu fonts-liberation fonts-jetbrains-mono
-  fonts-rubik fonts-readex-pro
-  qt6ct
-  git curl wget jq ripgrep bc rsync
-  python3 python3-venv python3-pip
-  gdm3
-  spice-vdagent
-)
-
-AVAILABLE=()
-MISSING=()
-
-for p in "${PACKAGES[@]}"; do
-    if dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed'; then
-        continue
-    fi
-    if apt-cache show "$p" >/dev/null 2>&1; then
-        AVAILABLE+=("$p")
-    else
-        MISSING+=("$p")
-    fi
+STAMP="$(date +%Y%m%d-%H%M%S)"
+BACKUP="$HOME/inir-backup-$STAMP"
+mkdir -p "$BACKUP"
+for d in "$HOME/.config/niri" "$HOME/.config/quickshell/inir" "$HOME/.config/illogical-impulse" "$HOME/.config/inir"; do
+  [ -e "$d" ] && cp -a "$d" "$BACKUP/"
 done
 
-if [ "${#AVAILABLE[@]}" -gt 0 ]; then
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${AVAILABLE[@]}" || {
-        warn "Some packages failed. Retrying individually."
-        for p in "${AVAILABLE[@]}"; do
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$p" || warn "Could not install: $p"
-        done
-    }
+REPO="$HOME/inir"
+if [ -d "$REPO/.git" ]; then
+  git -C "$REPO" fetch --depth=1 origin main
+  git -C "$REPO" reset --hard origin/main
+else
+  rm -rf "$REPO"
+  git clone --depth=1 https://github.com/snowarch/inir.git "$REPO"
+fi
+cd "$REPO"
+
+echo "=== iNiR setup ==="
+if ./setup install -y; then
+  echo "[OK] iNiR setup completed"
+else
+  echo "[WARN] iNiR setup failed; trying local package install"
+  sudo make install || true
 fi
 
-[ "${#MISSING[@]}" -eq 0 ] || warn "Unavailable on this Ubuntu repository: ${MISSING[*]}"
+export PATH="$HOME/.local/bin:$PATH"
+if [ -x "$REPO/scripts/inir" ]; then
+  mkdir -p "$HOME/.local/bin"
+  ln -sf "$REPO/scripts/inir" "$HOME/.local/bin/inir"
+fi
 
-echo
-echo "[4/9] Configuring services..."
-sudo systemctl enable --now NetworkManager 2>/dev/null || true
-sudo systemctl enable --now spice-vdagentd 2>/dev/null || true
+if command -v inir >/dev/null 2>&1; then
+  echo "=== iNiR doctor ==="
+  inir doctor || true
+  echo "=== iNiR status ==="
+  inir status || true
+  echo "=== iNiR service ==="
+  inir service enable || true
+fi
+
 sudo systemctl enable gdm3 2>/dev/null || true
 sudo systemctl set-default graphical.target 2>/dev/null || true
+sudo systemctl enable --now NetworkManager 2>/dev/null || true
+systemctl --user daemon-reload 2>/dev/null || true
 
-# Niri's systemd user session can need lingering/user-runtime support.
-loginctl enable-linger "$USER" 2>/dev/null || true
-
-echo
-echo "[5/9] Preparing user directories..."
-mkdir -p "$XDG_CONFIG_HOME"
-mkdir -p "$HOME/.local/bin" "$HOME/.local/share" "$HOME/.local/state"
+echo "=== Niri validation ==="
+command -v niri >/dev/null 2>&1 && niri validate || true
 
 echo
-echo "[6/9] Downloading the complete WehttamSnaps-Niri repository..."
-if [ -d "$WORK/.git" ]; then
-    git -C "$WORK" fetch --depth=1 origin main || true
-    git -C "$WORK" reset --hard origin/main || true
-else
-    rm -rf "$WORK"
-    git clone --depth=1 "$REPO" "$WORK" || die "Could not clone the theme repository."
-fi
-ok "Repository downloaded."
-
+echo "=== FINAL ==="
+echo "niri: $(command -v niri || echo MISSING)"
+echo "quickshell: $(command -v qs || echo MISSING)"
+echo "inir: $(command -v inir || echo MISSING)"
+echo "backup: $BACKUP"
+echo "log: $LOG"
 echo
-echo "[7/9] Installing the theme files..."
-# Upstream's manual instructions use ~/.config/quickshell/ii.
-# The current repository's setup script also synchronizes these directories.
-mkdir -p "$XDG_CONFIG_HOME/quickshell/ii"
-
-for f in "$WORK"/*.qml; do
-    [ -f "$f" ] && cp -f "$f" "$XDG_CONFIG_HOME/quickshell/ii/"
-done
-
-for d in modules services scripts assets translations; do
-    if [ -d "$WORK/$d" ]; then
-        mkdir -p "$XDG_CONFIG_HOME/quickshell/ii/$d"
-        rsync -a "$WORK/$d/" "$XDG_CONFIG_HOME/quickshell/ii/$d/"
-    fi
-done
-
-# Install the repository's ~/.config files without deleting existing user files.
-if [ -d "$WORK/dots/.config" ]; then
-    rsync -a "$WORK/dots/.config/" "$XDG_CONFIG_HOME/"
-fi
-
-# Some repository layouts put Niri files elsewhere; install those if present.
-if [ -d "$WORK/dots/.config/niri" ]; then
-    mkdir -p "$XDG_CONFIG_HOME/niri"
-    rsync -a "$WORK/dots/.config/niri/" "$XDG_CONFIG_HOME/niri/"
-fi
-
-# Ensure Niri starts the ii Quickshell configuration.
-NIRI_CFG="$XDG_CONFIG_HOME/niri/config.kdl"
-if [ -f "$NIRI_CFG" ]; then
-    if ! grep -Fq 'spawn-at-startup "qs" "-c" "ii"' "$NIRI_CFG"; then
-        printf '\n// WehttamSnaps-Niri\nspawn-at-startup "qs" "-c" "ii"\n' >> "$NIRI_CFG"
-    fi
-else
-    mkdir -p "$XDG_CONFIG_HOME/niri"
-    cat > "$NIRI_CFG" <<'KDL'
-input {
-    keyboard {
-    }
-}
-
-layout {
-    gaps 8
-}
-
-spawn-at-startup "qs" "-c" "ii"
-KDL
-fi
-
-# Make theme scripts executable.
-find "$XDG_CONFIG_HOME/quickshell/ii/scripts" \
-    -type f \( -name '*.sh' -o -name '*.py' -o -name '*.fish' \) \
-    -exec chmod +x {} + 2>/dev/null || true
-
-echo
-echo "[8/9] Installing the theme's Python requirements..."
-PYENV="$HOME/.local/state/wehttamsnaps-venv"
-python3 -m venv "$PYENV" 2>/dev/null || true
-if [ -x "$PYENV/bin/python" ] && [ -f "$WORK/requirements.txt" ]; then
-    "$PYENV/bin/python" -m pip install --upgrade pip
-    "$PYENV/bin/python" -m pip install -r "$WORK/requirements.txt" || \
-        warn "Some Python requirements could not be installed."
-fi
-
-# Make the venv available to the user's shell without changing system Python.
-mkdir -p "$HOME/.local/bin"
-ln -sf "$PYENV/bin/python" "$HOME/.local/bin/wehttamsnaps-python"
-
-echo
-echo "[9/9] Final health checks..."
-
-check_cmd() {
-    if command -v "$1" >/dev/null 2>&1; then
-        ok "$1: $(command -v "$1")"
-    else
-        warn "$1: MISSING"
-    fi
-}
-
-for c in niri qs quickshell-git matugen cliphist wl-copy wl-paste xwayland-satellite \
-         grim slurp fuzzel foot; do
-    check_cmd "$c"
-done
-
-if [ -f "$NIRI_CFG" ]; then
-    if command -v niri >/dev/null 2>&1; then
-        niri validate 2>&1 || warn "Niri config validation reported an error."
-    fi
-fi
-
-echo
-echo "============================================================"
-echo " INSTALLATION FINISHED"
-echo "============================================================"
-echo
-echo "Repository: $WORK"
-echo "Theme:      $XDG_CONFIG_HOME/quickshell/ii"
-echo "Niri:       $NIRI_CFG"
-echo "Log:        $LOG"
-echo
-echo "Important:"
-echo "  1. Reboot the VM."
-echo "  2. At the GDM login screen select Niri."
-echo "  3. Log in normally."
-echo
-echo "If something is unavailable, the script continues and records it"
-echo "instead of stopping at the first missing Ubuntu package."
-echo
-echo "For troubleshooting later:"
-echo "  journalctl --user -u niri.service -b"
-echo "  qs log -c ii"
-echo
+echo "If the three commands exist, reboot with: sudo reboot"
+echo "At GDM select Niri."
+echo "Do not add spawn-at-startup for iNiR; its service starts with Niri."
